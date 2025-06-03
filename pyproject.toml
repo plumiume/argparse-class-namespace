@@ -1,0 +1,14 @@
+[project]
+name = "argparse-class-namespace"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "nitech26414070", email = "ikeda@lee-lab.org" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
