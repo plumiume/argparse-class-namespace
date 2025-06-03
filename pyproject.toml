@@ -1,10 +1,10 @@
 [project]
-name = "argparse-class-namespace"
-version = "0.1.0"
+name = "argparse_class_namespace"
+version = "0.1.1"
 description = "Add your description here"
 readme = "README.md"
 authors = [
-    { name = "nitech26414070", email = "ikeda@lee-lab.org" }
+    { name = "ikeda", email = "ikeda@lee-lab.org" }
 ]
 requires-python = ">=3.10"
 dependencies = []
