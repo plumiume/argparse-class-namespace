@@ -29,98 +29,107 @@ def _is_dunder(name: str) -> bool:
     return name.startswith('__') and name.endswith('__')
 
 class NamespaceWrapper(Generic[_NS_co]):
+    
+    def _add_argument(self, attrname: str):
+
+        kwargs = {}
+
+        if attrname in self._ns_co_type.__dict__:
+            _name_or_flag = '--' + attrname.replace('_', '-')
+            kwargs['default'] = self._ns_co_type.__dict__[attrname]
+            if _name_or_flag != attrname:
+                kwargs['dest'] = attrname
+        else:
+            _name_or_flag = attrname.replace('_', '-')
+
+        ann = self._ns_co_type.__annotations__.get(attrname, str)
+
+        stack: list[object | type | SupportsOriginAndArgs] 
+        if isinstance(ann, SupportsOriginAndArgs):
+            if ann.__origin__ is list:
+                stack = list(ann.__args__)
+                kwargs['nargs'] = '*'
+            elif ann.__origin__ is tuple:
+                stack = list(ann.__args__)
+                kwargs['nargs'] = len(ann.__args__)
+            else:
+                stack = [ann]
+        else:
+            stack = [ann]
+
+        bool_found = False
+        choises = []
+        types = []
+
+        while stack:
+            current = stack.pop(0)
+
+            if isinstance(current, SupportsOriginAndArgs):
+                if current.__origin__ is Union or current.__origin__ is Literal:
+                    stack.extend(current.__args__)
+                else:
+                    stack.append(current.__origin__)
+            elif isinstance(current, UnionType):
+                stack.extend(current.__args__)
+            elif isinstance(current, type):
+                types.append(current)
+            elif isinstance(current, str | int):
+                choises.append(current)
+            elif isinstance(current, bool):
+                bool_found = True
+            else:
+                raise TypeError(f"Unsupported type annotation: {current}")
+
+        if bool_found:
+            kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
+            del kwargs['default']
+        elif choises:
+            kwargs['choices'] = choises
+        elif types:
+            def _type(value: str):
+                errors = []
+                for t in types:
+                    try:
+                        return t(value)
+                    except (ValueError, TypeError) as e:
+                        errors.append(e)
+                        continue
+                raise TypeError(
+                    f"Cannot convert '{value}' to any of the types: {', '.join(str(t) for t in types)}. "
+                    f"Errors: {', '.join(str(e) for e in errors)}"
+                )
+            kwargs['type'] = _type
+        else:
+            kwargs['type'] = str
+
+        self.parser.add_argument(
+            _name_or_flag,
+            **kwargs
+        )
+        return _name_or_flag, kwargs
+        
     def __init__(self, ns_type: type[_NS_co], options: NamespaceOptions):
 
         self._ns_co_type = ns_type
         self._options = options
+        self._subparsers = None
 
         attrnames = (ns_type.__annotations__.keys() - ns_type.__dict__.keys()) | ns_type.__dict__.keys()
 
         for attrname in attrnames:
-
-            kwargs = {}
-
             if _is_dunder(attrname):
                 continue
-
-            if attrname in ns_type.__dict__:
-                _name_or_flag = '--' + attrname.replace('_', '-')
-                kwargs['default'] = ns_type.__dict__[attrname]
-                kwargs['dest'] = attrname
+            if isinstance(ns_type.__dict__.get(attrname, None), NamespaceWrapper):
+                ...
             else:
-                _name_or_flag = attrname.replace('_', '-')
-
-            ann = ns_type.__annotations__.get(attrname, str)
-
-            stack: list[object | type | SupportsOriginAndArgs] 
-            if isinstance(ann, SupportsOriginAndArgs):
-                if ann.__origin__ is list:
-                    stack = list(ann.__args__)
-                    kwargs['nargs'] = '*'
-                elif ann.__origin__ is tuple:
-                    stack = list(ann.__args__)
-                    kwargs['nargs'] = len(ann.__args__)
-                else:
-                    stack = [ann]
-            else:
-                stack = [ann]
-
-            bool_found = False
-            choises = []
-            types = []
-
-            while stack:
-                current = stack.pop(0)
-
-                if isinstance(current, SupportsOriginAndArgs):
-                    if current.__origin__ is Union or current.__origin__ is Literal:
-                        stack.extend(current.__args__)
-
-                    else:
-                        stack.append(current.__origin__)
-                elif isinstance(current, UnionType):
-                    stack.extend(current.__args__)
-                elif isinstance(current, type):
-                    types.append(current)
-                elif isinstance(current, str | int):
-                    choises.append(current)
-                elif isinstance(current, bool):
-                    bool_found = True
-                else:
-                    raise TypeError(f"Unsupported type annotation: {current}")
-
-            if bool_found:
-                kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
-                del kwargs['default']
-            elif choises:
-                kwargs['choices'] = choises
-            elif types:
-                def _type(value: str):
-                    errors = []
-                    for t in types:
-                        try:
-                            return t(value)
-                        except (ValueError, TypeError) as e:
-                            errors.append(e)
-                            continue
-                    raise TypeError(
-                        f"Cannot convert '{value}' to any of the types: {', '.join(str(t) for t in types)}. "
-                        f"Errors: {', '.join(str(e) for e in errors)}"
-                    )
-                kwargs['type'] = _type
-            else:
-                kwargs['type'] = str
-
-            print(_name_or_flag, kwargs)
-
-            self.parser.add_argument(
-                _name_or_flag,
-                **kwargs
-            )
+                self._add_argument(attrname)
 
     @property
     def ns_type(self) -> type[_NS_co]:
         return self._ns_co_type
+    @property
+    def subparsers(self):
+        return self._subparsers
     @property
     def parser(self) -> argparse.ArgumentParser:
         return self._options['parser']
