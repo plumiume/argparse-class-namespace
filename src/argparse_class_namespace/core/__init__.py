@@ -2,7 +2,7 @@ from typing import (
     TypeVar, Generic, Protocol, runtime_checkable,
     TypedDict,
     Literal, Union,
-    overload, 
+    overload, Callable,
     Sequence, Unpack
 )
 from types import UnionType
@@ -12,6 +12,17 @@ import argcomplete
 _NS = TypeVar('_NS', bound=object)
 _NS_co = TypeVar('_NS_co', covariant=True, bound=object)
 
+class AddArgumentKwargs(TypedDict, total=False):
+    default: object
+    dest: str
+    nargs: int | str
+    choices: list[str | int]
+    action: str
+    type: type | Callable[[str], object]
+class AddParserKwargs(TypedDict, total=False):
+    dest: str
+    parents: list[argparse.ArgumentParser]
+
 @runtime_checkable
 class SupportsOriginAndArgs(Protocol):
     __origin__: type
@@ -19,7 +30,8 @@ class SupportsOriginAndArgs(Protocol):
 
 class NamespaceOptions(TypedDict):
     parser: argparse.ArgumentParser
-class NamespaceOptionsPartial(NamespaceOptions, total=False): ...
+class NamespaceOptionsPartial(TypedDict, total=False):
+    parser: argparse.ArgumentParser
 def _resolve_namespace_options(full: NamespaceOptions, partial: NamespaceOptionsPartial) -> NamespaceOptions:
     options = full.copy()
     options.update(partial)
@@ -29,10 +41,16 @@ def _is_dunder(name: str) -> bool:
     return name.startswith('__') and name.endswith('__')
 
 class NamespaceWrapper(Generic[_NS_co]):
-    
-    def _add_argument(self, attrname: str):
 
-        kwargs = {}
+    def _prepare_subparser(self, attrname: str, inst: 'NamespaceWrapper'):
+        return ([attrname.replace('_', '-')], AddParserKwargs({
+            'dest': attrname,
+            'parents': [inst.parser],
+        }))
+    
+    def _prepare_arg(self, attrname: str) -> tuple[list[str], AddArgumentKwargs]:
+
+        kwargs: AddArgumentKwargs = {}
 
         if attrname in self._ns_co_type.__dict__:
             _name_or_flag = '--' + attrname.replace('_', '-')
@@ -72,11 +90,12 @@ class NamespaceWrapper(Generic[_NS_co]):
             elif isinstance(current, UnionType):
                 stack.extend(current.__args__)
             elif isinstance(current, type):
-                types.append(current)
+                if issubclass(current, bool):
+                    bool_found = True
+                else:
+                    types.append(current)
             elif isinstance(current, str | int):
                 choises.append(current)
-            elif isinstance(current, bool):
-                bool_found = True
             else:
                 raise TypeError(f"Unsupported type annotation: {current}")
 
@@ -102,11 +121,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         else:
             kwargs['type'] = str
 
-        self.parser.add_argument(
-            _name_or_flag,
-            **kwargs
-        )
-        return _name_or_flag, kwargs
+        return [_name_or_flag], kwargs
         
     def __init__(self, ns_type: type[_NS_co], options: NamespaceOptions):
 
@@ -116,13 +131,29 @@ class NamespaceWrapper(Generic[_NS_co]):
 
         attrnames = (ns_type.__annotations__.keys() - ns_type.__dict__.keys()) | ns_type.__dict__.keys()
 
+        add_argument_args: list[tuple[list[str], AddArgumentKwargs]] = []
+        add_subparser_args: list[tuple[list[str], AddParserKwargs]] = []
+
         for attrname in attrnames:
             if _is_dunder(attrname):
                 continue
-            if isinstance(ns_type.__dict__.get(attrname, None), NamespaceWrapper):
-                ...
+
+            inst = getattr(ns_type, attrname, None)
+            if isinstance(inst, NamespaceWrapper):
+                add_subparser_args.append(self._prepare_subparser(attrname, inst))
             else:
-                self._add_argument(attrname)
+                add_argument_args.append(self._prepare_arg(attrname))
+
+        for args, kwargs in add_subparser_args:
+            self.get_or_create_subparsers().add_parser(*args, **kwargs)
+
+        for args, kwargs in add_argument_args:
+            self.parser.add_argument(*args, **kwargs)
+
+    def get_or_create_subparsers(self):
+        if self._subparsers is None:
+            self._subparsers = self.parser.add_subparsers()
+        return self._subparsers
 
     @property
     def ns_type(self) -> type[_NS_co]:
@@ -146,6 +177,35 @@ def namespace(ns_type: type[_NS_co], /) -> NamespaceWrapper[_NS_co]: ...
 def namespace(**partial_options: Unpack[NamespaceOptionsPartial]) -> NamespaceWithOptions: ...
 
 def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[NamespaceOptionsPartial]): # type: ignore
+    """
+    Decorator or factory function to wrap a class with a NamespaceWrapper for argparse integration.
+    This function can be used as a decorator or called directly to create a NamespaceWrapper
+    for a given class type, enabling advanced argparse namespace handling.
+
+    Args:
+        ns_type (`type[_NS_co] | None`, optional): The class type to wrap. If None, the function
+            returns a decorator that can be applied to a class. If a type is provided, the function
+            returns a NamespaceWrapper instance for that type. Defaults to None.
+        **partial_options (`*NamespaceOptionsPartial`): Partial options to customize the
+            namespace behavior. These options are merged with defaults.
+
+    Returns:
+        out (`NamespaceWrapper[_NS_co] | (ns_type: type[_NS_co]) -> NamespaceWrapper[_NS_co]`): 
+            If `ns_type` is provided, returns a NamespaceWrapper instance for the given type.
+            If `ns_type` is None, returns a decorator that wraps a class with NamespaceWrapper.
+
+    Examples:
+        ```python
+            @namespace
+            class MyNamespaceAsDecorator:
+                ...
+
+            class MyNamespaceAsFactory:
+                ...
+            wrapper = namespace(MyNamespaceAsFactory)
+        ```
+    """
+
     resolved_options = _resolve_namespace_options(
         NamespaceOptions(parser=argparse.ArgumentParser()),
         partial_options
