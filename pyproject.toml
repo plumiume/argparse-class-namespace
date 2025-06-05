@@ -1,6 +1,7 @@
 [project]
 name = "argparse_class_namespace"
-version = "0.1.1"
+dynamic = ["version"]
+# version = "0.1.1"
 description = "Add your description here"
 readme = "README.md"
 authors = [
