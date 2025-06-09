@@ -129,7 +129,8 @@ class NamespaceWrapper(Generic[_NS_co]):
         self._options = options
         self._subparsers = None
 
-        attrnames = (ns_type.__annotations__.keys() - ns_type.__dict__.keys()) | ns_type.__dict__.keys()
+        annotaion_only_keys = ns_type.__annotations__.keys() - ns_type.__dict__.keys()
+        attrnames = ({k: None for k in annotaion_only_keys} | ns_type.__dict__).keys()
 
         add_argument_args: list[tuple[list[str], AddArgumentKwargs]] = []
         add_subparser_args: list[tuple[list[str], AddParserKwargs]] = []
