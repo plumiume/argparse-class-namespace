@@ -42,6 +42,20 @@ def _is_dunder(name: str) -> bool:
 
 class NamespaceWrapper(Generic[_NS_co]):
 
+    def _get_attrnames(self, ns_type: type[_NS]) -> list[str]:
+        
+        annotations_keys = ns_type.__annotations__.keys()
+        dict_keys = ns_type.__dict__.keys()
+        
+        ordered_keys = {
+            k: i for i, k in enumerate(annotations_keys)
+        } | {k: i for i, k in enumerate(dict_keys, start=len(annotations_keys))}
+
+        return sorted(
+            annotations_keys | dict_keys,
+            key=lambda k: ordered_keys[k]
+        )
+
     def _prepare_subparser(self, attrname: str, inst: 'NamespaceWrapper'):
         return ([attrname.replace('_', '-')], AddParserKwargs({
             'dest': attrname,
@@ -129,8 +143,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         self._options = options
         self._subparsers = None
 
-        annotaion_only_keys = ns_type.__annotations__.keys() - ns_type.__dict__.keys()
-        attrnames = ({k: None for k in annotaion_only_keys} | ns_type.__dict__).keys()
+        attrnames = self._get_attrnames(ns_type)
 
         add_argument_args: list[tuple[list[str], AddArgumentKwargs]] = []
         add_subparser_args: list[tuple[list[str], AddParserKwargs]] = []
