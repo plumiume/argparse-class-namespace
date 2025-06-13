@@ -14,7 +14,7 @@ def namespace(ns_type: type[_NS_co], /) -> NamespaceWrapper[_NS_co]: ...
 @overload
 def namespace(**partial_options: Unpack[NamespaceOptionsPartial]) -> NamespaceWithOptions: ...
 
-def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[NamespaceOptionsPartial]): # type: ignore
+def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[NamespaceOptionsPartial]):
     """
     Decorator or factory function to wrap a class with a NamespaceWrapper for argparse integration.
     This function can be used as a decorator or called directly to create a NamespaceWrapper
