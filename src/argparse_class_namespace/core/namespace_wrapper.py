@@ -185,7 +185,7 @@ class NamespaceWrapper(Generic[_NS_co]):
 
         self._ns_co_type = ns_type
         self._options = options
-        self.parser.set_defaults(**options['defaults'])
+        options['parser'].set_defaults(**options['defaults'])
         self._subparsers = None
 
         self._attrnames = self._get_attrnames(ns_type)
@@ -232,13 +232,16 @@ class NamespaceWrapper(Generic[_NS_co]):
     @property
     def parser(self) -> argparse.ArgumentParser:
         return self._options['parser']
+    @property
+    def defaults(self) -> dict[str, Any]:
+        return self._options['defaults']
     def parse_args(self: 'NamespaceWrapper[_NS]', args: Sequence[str] | None = None) -> _NS:
         argcomplete.autocomplete(self.parser)
         parse_result = self.parser.parse_args(args, ParseResult())
         bind_name = parse_result._namespace_wrapper_bind_name
         ns_wrapper = parse_result._namespace_wrapper_instance
         ns = ns_wrapper._ns_co_type()
-        for attrname in ns_wrapper.attrnames:
+        for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
             value = getattr(parse_result, attrname)
             setattr(ns, attrname, value)
         while ns_wrapper._parent is not None:
