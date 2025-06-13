@@ -44,9 +44,13 @@ def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[
         ```
     """
 
+    parser = argparse.ArgumentParser(add_help=False)
+    parser._add_action(argparse._HelpAction(['-h', '--help']))
+    
     resolved_options = _resolve_namespace_options(
         NamespaceOptions(
-            parser=argparse.ArgumentParser()
+            parser=parser,
+            defaults={}
         ),
         partial_options
     )

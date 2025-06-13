@@ -17,3 +17,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+]
