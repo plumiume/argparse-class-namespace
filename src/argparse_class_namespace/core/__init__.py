@@ -1,11 +1,12 @@
 from typing import (
     TypeVar, Generic, Protocol, runtime_checkable,
-    TypedDict,
+    TypedDict, DefaultDict,
     Literal, Union,
     overload, Callable,
     Sequence, Unpack
 )
 from types import UnionType
+from itertools import chain
 import argparse
 import argcomplete
 
@@ -16,7 +17,7 @@ class AddArgumentKwargs(TypedDict, total=False):
     default: object
     dest: str
     nargs: int | str
-    choices: list[str | int]
+    choices: list[object]
     action: str
     type: type | Callable[[str], object]
 class AddParserKwargs(TypedDict, total=False):
@@ -90,8 +91,10 @@ class NamespaceWrapper(Generic[_NS_co]):
             stack = [ann]
 
         bool_found = False
-        choices: list[str | int | bool] = []
-        types: list[type] = []
+        class Sentinel:
+            def __eq__(self, other): return True
+        allow_any_value = Sentinel()
+        allowed = DefaultDict(list[object])
 
         while stack:
             current = stack.pop(0)
@@ -107,37 +110,32 @@ class NamespaceWrapper(Generic[_NS_co]):
                 if issubclass(current, bool):
                     bool_found = True
                 else:
-                    types.append(current)
+                    allowed[current].append(allow_any_value)
             elif isinstance(current, str | int | bool):
-                choices.append(current)
+                allowed[type(current)].append(current)
             else:
                 raise TypeError(f"Unsupported type annotation: {current}")
 
+        choices = list(chain.from_iterable(allowed.values()))
         if bool_found:
             kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
             del kwargs['default']
-        elif not types and choices:
+        elif allow_any_value not in choices:
             kwargs['choices'] = choices
-        elif types:
-            def _type(value: str):
-                errors = []
-                for t in types:
+        elif allowed:
+            def _type(value_string: str):
+                errors: list[TypeError | ValueError] = []
+                for t, a in allowed.items():
                     try:
-                        return t(value)
-                    except (ValueError, TypeError) as e:
+                        value = t(value_string)
+                    except (TypeError, ValueError) as e:
                         errors.append(e)
                         continue
-                for v in choices:
-                    try:
-                        ret = v.__class__(value)
-                    except (ValueError, TypeError) as e:
-                        errors.append(e)
-                        continue
-                    if ret not in choices:
-                        continue
+                    if allow_any_value not in a or value in a:
+                        return value
                 raise TypeError(
-                    f"Cannot convert '{value}' to any of the types: {', '.join(str(t) for t in types)}. "
-                    f"Errors: {', '.join(str(e) for e in errors)}"
+                    f"Value '{value_string}' does not match any of the allowed types: "
+                    f"{', '.join(str(t) for t in allowed.keys())}. Errors: {errors}"
                 )
             kwargs['type'] = _type
         else:
