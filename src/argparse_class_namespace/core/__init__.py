@@ -90,8 +90,8 @@ class NamespaceWrapper(Generic[_NS_co]):
             stack = [ann]
 
         bool_found = False
-        choises = []
-        types = []
+        choices: list[str | int | bool] = []
+        types: list[type] = []
 
         while stack:
             current = stack.pop(0)
@@ -108,16 +108,16 @@ class NamespaceWrapper(Generic[_NS_co]):
                     bool_found = True
                 else:
                     types.append(current)
-            elif isinstance(current, str | int):
-                choises.append(current)
+            elif isinstance(current, str | int | bool):
+                choices.append(current)
             else:
                 raise TypeError(f"Unsupported type annotation: {current}")
 
         if bool_found:
             kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
             del kwargs['default']
-        elif not types and choises: # if no types are specified and choices are provided
-            kwargs['choices'] = choises
+        elif not types and choices:
+            kwargs['choices'] = choices
         elif types:
             def _type(value: str):
                 errors = []
@@ -126,6 +126,14 @@ class NamespaceWrapper(Generic[_NS_co]):
                         return t(value)
                     except (ValueError, TypeError) as e:
                         errors.append(e)
+                        continue
+                for v in choices:
+                    try:
+                        ret = v.__class__(value)
+                    except (ValueError, TypeError) as e:
+                        errors.append(e)
+                        continue
+                    if ret not in choices:
                         continue
                 raise TypeError(
                     f"Cannot convert '{value}' to any of the types: {', '.join(str(t) for t in types)}. "
