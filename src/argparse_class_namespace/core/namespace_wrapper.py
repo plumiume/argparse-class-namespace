@@ -185,7 +185,9 @@ class NamespaceWrapper(Generic[_NS_co]):
 
         self._ns_co_type = ns_type
         self._options = options
+        self.parser.set_defaults(**options['defaults'])
         self._subparsers = None
+
         self._attrnames = self._get_attrnames(ns_type)
         self._parent: 'NamespaceWrapper | None' = None
         self._register_namespace(ns_type)
