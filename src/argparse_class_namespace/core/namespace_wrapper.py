@@ -43,7 +43,8 @@ class NamespaceWrapper(Generic[_NS_co]):
         def __eq__(self, other): return True
     _allow_any_value = _Sentinel()
 
-    def _is_dunder(self, name: str) -> bool:
+    @staticmethod
+    def _is_dunder(name: str) -> bool:
         return name.startswith('__') and name.endswith('__')
 
     @staticmethod

@@ -5,6 +5,10 @@ class Repr:
         attrnames = NamespaceWrapper._get_attrnames(self.__class__)
         return (
             f'{self.__class__.__name__}('
-            + ', '.join(f'{name}={getattr(self, name)}' for name in attrnames)
+            + ', '.join(
+                f'{name}={getattr(self, name)}'
+                for name in attrnames
+                if not NamespaceWrapper._is_dunder(name)
+            )
             + ')'
         )
