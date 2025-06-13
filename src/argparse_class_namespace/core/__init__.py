@@ -116,7 +116,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         if bool_found:
             kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
             del kwargs['default']
-        elif choises:
+        elif not types and choises: # if no types are specified and choices are provided
             kwargs['choices'] = choises
         elif types:
             def _type(value: str):
