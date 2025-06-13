@@ -150,13 +150,15 @@ class NamespaceWrapper(Generic[_NS_co]):
         self._ns_co_type = ns_type
         self._options = options
         self._subparsers = None
+        self._attrnames = self._get_attrnames(ns_type)
+        self._register_namespace(ns_type)
 
-        attrnames = self._get_attrnames(ns_type)
+    def _register_namespace(self, ns_type: type):
 
         add_argument_args: list[tuple[list[str], AddArgumentKwargs]] = []
         add_subparser_args: list[tuple[list[str], AddParserKwargs]] = []
 
-        for attrname in attrnames:
+        for attrname in self._attrnames:
             if self._is_dunder(attrname):
                 continue
 
@@ -183,6 +185,9 @@ class NamespaceWrapper(Generic[_NS_co]):
     @property
     def subparsers(self):
         return self._subparsers
+    @property
+    def attrnames(self) -> list[str]:
+        return self._attrnames
     @property
     def parser(self) -> argparse.ArgumentParser:
         return self._options['parser']

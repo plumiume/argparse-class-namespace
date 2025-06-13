@@ -6,7 +6,7 @@ class Repr:
         return (
             f'{self.__class__.__name__}('
             + ', '.join(
-                f'{name}={getattr(self, name)}'
+                f'{name}={repr(getattr(self, name))}'
                 for name in attrnames
                 if not NamespaceWrapper._is_dunder(name)
             )
