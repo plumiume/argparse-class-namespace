@@ -1,4 +1,4 @@
-from typing import TypeVar, overload, Unpack
+from typing import TypeVar, overload, Unpack, Callable
 import argparse
 
 from .namespace_wrapper import (

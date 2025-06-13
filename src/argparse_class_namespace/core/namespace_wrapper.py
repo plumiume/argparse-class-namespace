@@ -262,5 +262,5 @@ class NamespaceWrapper(Generic[_NS_co]):
             else:
                 return None
 
-class NamespaceWithOptions(Protocol[_NS]):
+class NamespaceWithOptions(Protocol):
     def __call__(self, ns_type: type[_NS]) -> NamespaceWrapper[_NS]: ...

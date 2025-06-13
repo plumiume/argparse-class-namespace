@@ -51,3 +51,5 @@ def test_namespace_subnamespace():
         '--sub-str', 'world',
         '--sub-int', '100'
     ])
+
+    ns.sub_ns
