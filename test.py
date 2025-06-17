@@ -60,7 +60,6 @@ def test_namespace_subnamespace():
 
 def test_nested_namespace():
 
-    import argparse
     from argparse_class_namespace import namespace
 
     @namespace

@@ -1,7 +1,7 @@
 from typing import (
     TypeVar, Generic, Protocol, runtime_checkable,
     Callable, Sequence,
-    Union, Literal,
+    Union, Literal, Unpack,
     TypedDict, DefaultDict,
     Any, overload
 )
@@ -44,8 +44,23 @@ def _resolve_namespace_options(full: NamespaceOptions, partial: NamespaceOptions
     options.update(partial)
     return options
 
+class CallbackOptions(TypedDict):
+    name: str | None
+class CallbackOptionsPartial(TypedDict, total=False):
+    name: str | None
+def _resolve_callback_options(full: CallbackOptions, partial: CallbackOptionsPartial) -> CallbackOptions:
+    options = full.copy()
+    options.update(partial)
+    return options
+
 def _return_bool(value: bool) -> bool:
     return value
+
+class NamespaceWithOptions(Protocol):
+    def __call__(self, ns_type: type[_NS]) -> 'NamespaceWrapper[_NS]': ...
+
+class CallbackWithOptions(Protocol):
+    def __call__(self, func: Callable[[_NS], None]) -> Callable[[_NS], None]: ...
 
 @runtime_checkable
 class SupportsOriginAndArgs(Protocol):
@@ -233,6 +248,9 @@ class NamespaceWrapper(Generic[_NS_co]):
     def ns_type(self) -> type[_NS_co]:
         return self._ns_co_type
     @property
+    def T(self) -> type[_NS_co]:
+        return self._ns_co_type
+    @property
     def subparsers(self):
         return self._subparsers
     @property
@@ -244,6 +262,65 @@ class NamespaceWrapper(Generic[_NS_co]):
     @property
     def defaults(self) -> dict[str, Any]:
         return self._options['defaults']
+
+    @overload
+    def __get__(self: 'NamespaceWrapper[_NS]', instance: ParseResult | None, owner: type[ParseResult] | None = None) -> 'NamespaceWrapper[_NS]': ...
+    @overload
+    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O, owner: type[_O] | None = None) -> _NS | None: ...
+
+    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O | None, owner: type[_O] | None = None):
+        if instance is None or isinstance(instance, ParseResult):
+            return self
+        else:
+            # Fallback to None if not set via setattr
+            if _return_bool(False):
+                # never called, but needed for type checking
+                return self._ns_co_type()
+            else:
+                return None
+
+    @overload
+    def callback(
+        self: 'NamespaceWrapper[_NS]',
+        func: Callable[[_NS], None],
+        /
+        ) -> Callable[[_NS], None]: ...
+    @overload
+    def callback(
+        self: 'NamespaceWrapper[_NS]',
+        func: None = None,
+        /,
+        **kwargs: Unpack[CallbackOptionsPartial]
+        ) -> CallbackWithOptions: ...
+    def callback(
+        self: 'NamespaceWrapper[_NS]',
+        func: Callable[[_NS], None] | None = None,
+        /,
+        **kwargs: Unpack[CallbackOptionsPartial]
+        ):
+
+        resolved_options = _resolve_callback_options(
+            CallbackOptions({
+                'name': None
+            }),
+            kwargs
+        )
+
+        def decorator(func: Callable[[_NS], None]) -> Callable[[_NS], None]:
+            name = resolved_options['name'] or func.__name__
+            self.parser.set_defaults(**{
+                name: func
+            })
+            return func
+
+        if func is None:
+            return decorator
+        else:
+            return decorator(func)
+
+    def set_defaults(self, **kwargs: object):
+        return self.parser.set_defaults(**kwargs)
+
     def parse_args(self: 'NamespaceWrapper[_NS]', args: Sequence[str] | None = None) -> _NS:
         argcomplete.autocomplete(self.parser)
         parse_result = self.parser.parse_args(args, ParseResult())
@@ -272,21 +349,3 @@ class NamespaceWrapper(Generic[_NS_co]):
             ns = new_ns
         return ns
 
-    @overload
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: ParseResult | None, owner: type[ParseResult] | None = None) -> 'NamespaceWrapper[_NS]': ...
-    @overload
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O, owner: type[_O] | None = None) -> _NS | None: ...
-
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O | None, owner: type[_O] | None = None):
-        if instance is None or isinstance(instance, ParseResult):
-            return self
-        else:
-            # Fallback to None if not set via setattr
-            if _return_bool(False):
-                # never called, but needed for type checking
-                return self._ns_co_type()
-            else:
-                return None
-
-class NamespaceWithOptions(Protocol):
-    def __call__(self, ns_type: type[_NS]) -> NamespaceWrapper[_NS]: ...
