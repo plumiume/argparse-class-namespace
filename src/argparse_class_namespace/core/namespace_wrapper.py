@@ -293,7 +293,6 @@ class NamespaceWrapper(Generic[_NS_co]):
     @overload
     def callback(
         self: 'NamespaceWrapper[_NS]',
-        func: None = None,
         /,
         **kwargs: Unpack[CallbackOptionsPartial]
         ) -> CallbackWithOptions: ...
