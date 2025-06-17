@@ -83,6 +83,14 @@ class NamespaceWrapper(Generic[_NS_co]):
             key=lambda k: ordered_keys[k]
         )
 
+    def _bind(self, bindname: str, parent: 'NamespaceWrapper'):
+        self._bindname = bindname
+        self._parent = parent
+        self.parser.set_defaults(
+            _namespace_wrapper_bind_name=bindname,
+            _namespace_wrapper_instance=self
+        )
+
     def _prepare_subparser(
         self: 'NamespaceWrapper[_NS]',
         attrname: str,
@@ -90,7 +98,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         ) -> tuple[
             list[str], AddParserKwargs
         ]:
-        inst._parent = self
+        inst._bind(attrname, self)
         return ([attrname.replace('_', '-')], AddParserKwargs({
             'add_help': False,
             'parents': [inst.parser],
@@ -206,7 +214,6 @@ class NamespaceWrapper(Generic[_NS_co]):
 
             inst = getattr(ns_type, attrname, None)
             if isinstance(inst, NamespaceWrapper):
-                inst._bind(attrname, self)
                 add_subparser_args.append(self._prepare_subparser(attrname, inst))
             else:
                 add_argument_args.append(self._prepare_arg(attrname))
@@ -221,14 +228,6 @@ class NamespaceWrapper(Generic[_NS_co]):
         if self._subparsers is None:
             self._subparsers = self.parser.add_subparsers()
         return self._subparsers
-
-    def _bind(self, bindname: str, parent: 'NamespaceWrapper'):
-        self._bindname = bindname
-        self._parent = parent
-        self.parser.set_defaults(
-            _namespace_wrapper_bind_name=bindname,
-            _namespace_wrapper_instance=self
-        )
 
     @property
     def ns_type(self) -> type[_NS_co]:
@@ -253,8 +252,9 @@ class NamespaceWrapper(Generic[_NS_co]):
         print(ns_wrapper.ns_type.__name__, bind_name)
         ns = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
-            value = getattr(parse_result, attrname)
-            setattr(ns, attrname, value)
+            if ns_wrapper is self and ns_wrapper.subparsers and attrname in ns_wrapper.subparsers.choices:
+                continue
+            setattr(ns, attrname, getattr(parse_result, attrname))
         while bind_name is not None and ns_wrapper._parent is not None:
             ns_wrapper = ns_wrapper._parent
             new_ns = ns_wrapper._ns_co_type()

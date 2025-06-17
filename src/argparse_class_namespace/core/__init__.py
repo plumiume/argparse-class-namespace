@@ -50,7 +50,9 @@ def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[
     resolved_options = _resolve_namespace_options(
         NamespaceOptions(
             parser=parser,
-            defaults={}
+            defaults={
+                
+            }
         ),
         partial_options
     )
