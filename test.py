@@ -54,6 +54,8 @@ def test_namespace_subnamespace():
 
     ret = (ns.sub_ns and ns.sub_ns.sub_str and ns.sub_ns.sub_int)
 
+    ns = NamespaceWithSubNamespace.parse_args([])
+
     assert ret, "SubNamespace parsing failed"
 
 def test_nested_namespace():

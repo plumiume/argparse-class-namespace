@@ -249,10 +249,19 @@ class NamespaceWrapper(Generic[_NS_co]):
         parse_result = self.parser.parse_args(args, ParseResult())
         ns_wrapper = parse_result._namespace_wrapper_instance
         bind_name = parse_result._namespace_wrapper_bind_name
-        print(ns_wrapper.ns_type.__name__, bind_name)
         ns = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
-            if ns_wrapper is self and ns_wrapper.subparsers and attrname in ns_wrapper.subparsers.choices:
+            if (
+                ns_wrapper is self
+                and ns_wrapper.subparsers
+                and (
+                    any(
+                        attrname.replace('_', pc) in ns_wrapper.subparsers.choices
+                        for pc in ns_wrapper.parser.prefix_chars
+                    )
+                    or attrname in ns_wrapper.subparsers.choices
+                )
+                ):
                 continue
             setattr(ns, attrname, getattr(parse_result, attrname))
         while bind_name is not None and ns_wrapper._parent is not None:
