@@ -1,7 +1,7 @@
 from typing import (
-    TypeVar, Generic, Protocol, runtime_checkable,
+    TypeVar, Generic, Protocol, ParamSpec, runtime_checkable,
     Callable, Sequence,
-    Union, Literal, Unpack,
+    Union, Literal, Unpack, Concatenate,
     TypedDict, DefaultDict,
     Any, overload
 )
@@ -14,6 +14,8 @@ _NS = TypeVar('_NS', bound=object)
 _NS_co = TypeVar('_NS_co', covariant=True, bound=object)
 
 _O = TypeVar('_O', bound=object)
+_P = ParamSpec('_P')
+_R = TypeVar('_R')
 
 class AddArgumentKwargs(TypedDict, total=False):
     default: object
@@ -60,7 +62,10 @@ class NamespaceWithOptions(Protocol):
     def __call__(self, ns_type: type[_NS]) -> 'NamespaceWrapper[_NS]': ...
 
 class CallbackWithOptions(Protocol):
-    def __call__(self, func: Callable[[_NS], None]) -> Callable[[_NS], None]: ...
+    def __call__(
+        self,
+        func: Callable[[Concatenate[_NS, _P]], _R]
+        ) -> Callable[[Concatenate[_NS, _P]], _R]: ...
 
 @runtime_checkable
 class SupportsOriginAndArgs(Protocol):
@@ -282,9 +287,9 @@ class NamespaceWrapper(Generic[_NS_co]):
     @overload
     def callback(
         self: 'NamespaceWrapper[_NS]',
-        func: Callable[[_NS], None],
+        func: Callable[[Concatenate[_NS, _P]], _R],
         /
-        ) -> Callable[[_NS], None]: ...
+        ) -> Callable[[Concatenate[_NS, _P]], _R]: ...
     @overload
     def callback(
         self: 'NamespaceWrapper[_NS]',
@@ -294,7 +299,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         ) -> CallbackWithOptions: ...
     def callback(
         self: 'NamespaceWrapper[_NS]',
-        func: Callable[[_NS], None] | None = None,
+        func: Callable[[Concatenate[_NS, _P]], _R] | None = None,
         /,
         **kwargs: Unpack[CallbackOptionsPartial]
         ):
@@ -306,7 +311,7 @@ class NamespaceWrapper(Generic[_NS_co]):
             kwargs
         )
 
-        def decorator(func: Callable[[_NS], None]) -> Callable[[_NS], None]:
+        def decorator(func: Callable[[Concatenate[_NS, _P]], _R]) -> Callable[[Concatenate[_NS, _P]], _R]:
             name = resolved_options['name'] or func.__name__
             self.parser.set_defaults(**{
                 name: func
