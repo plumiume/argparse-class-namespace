@@ -311,9 +311,8 @@ class NamespaceWrapper(Generic[_NS_co]):
         )
 
         def decorator(func: Callable[Concatenate[_NS, _P], _R]) -> Callable[Concatenate[_NS, _P], _R]:
-            name = resolved_options['name'] or func.__name__
             self.parser.set_defaults(**{
-                name: func
+                resolved_options['name'] or func.__name__: func
             })
             return func
 

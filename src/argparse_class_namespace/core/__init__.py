@@ -56,9 +56,9 @@ def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[
         ),
         partial_options
     )
+    def decorator(ns_type: type[_NS_co]) -> NamespaceWrapper[_NS_co]:
+        return NamespaceWrapper(ns_type, resolved_options)
     if ns_type is None:
-        def decorator(ns_type: type[_NS_co]) -> NamespaceWrapper[_NS_co]:
-            return NamespaceWrapper(ns_type, resolved_options)
         return decorator
     else:
-        return NamespaceWrapper[_NS_co](ns_type, resolved_options)
+        return decorator(ns_type)
