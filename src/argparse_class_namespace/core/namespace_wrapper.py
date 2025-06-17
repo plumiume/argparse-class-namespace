@@ -250,9 +250,10 @@ class NamespaceWrapper(Generic[_NS_co]):
         parse_result = self.parser.parse_args(args, ParseResult())
         ns_wrapper = parse_result._namespace_wrapper_instance
         bind_name = parse_result._namespace_wrapper_bind_name
+        print(ns_wrapper.ns_type.__name__, bind_name)
         ns = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
-            value = getattr(parse_result, attrname, getattr(ns_wrapper.ns_type, attrname))
+            value = getattr(parse_result, attrname)
             setattr(ns, attrname, value)
         while bind_name is not None and ns_wrapper._parent is not None:
             ns_wrapper = ns_wrapper._parent
