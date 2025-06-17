@@ -212,7 +212,7 @@ class NamespaceWrapper(Generic[_NS_co]):
                 add_argument_args.append(self._prepare_arg(attrname))
 
         for args, kwargs in add_subparser_args:
-            parser = self.get_or_create_subparsers().add_parser(*args, **kwargs)
+            self.get_or_create_subparsers().add_parser(*args, **kwargs)
 
         for args, kwargs in add_argument_args:
             self.parser.add_argument(*args, **kwargs)
@@ -252,7 +252,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         bind_name = parse_result._namespace_wrapper_bind_name
         ns = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
-            value = getattr(parse_result, attrname)
+            value = getattr(parse_result, attrname, getattr(ns_wrapper.ns_type, attrname))
             setattr(ns, attrname, value)
         while bind_name is not None and ns_wrapper._parent is not None:
             ns_wrapper = ns_wrapper._parent
