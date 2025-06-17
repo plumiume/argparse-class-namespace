@@ -26,8 +26,11 @@ class AddParserKwargs(TypedDict, total=False):
     add_help: Literal[False]
     parents: list[argparse.ArgumentParser]
 
-class ParserDefaults(TypedDict, Generic[_NS]):
-    _namespace_wrapper_bind_name: str
+class AddArgumentDefaults(TypedDict, Generic[_NS]):
+    pass
+
+class AddParserDefaults(TypedDict, Generic[_NS]):
+    _namespace_wrapper_bind_name: str | None
     _namespace_wrapper_instance: 'NamespaceWrapper[_NS]'
 
 class NamespaceOptions(TypedDict):
@@ -85,22 +88,19 @@ class NamespaceWrapper(Generic[_NS_co]):
         attrname: str,
         inst: 'NamespaceWrapper'
         ) -> tuple[
-            list[str], AddParserKwargs, ParserDefaults[_NS]
+            list[str], AddParserKwargs
         ]:
         inst._parent = self
         return ([attrname.replace('_', '-')], AddParserKwargs({
             'add_help': False,
             'parents': [inst.parser],
-        }), {
-            '_namespace_wrapper_bind_name': attrname,
-            '_namespace_wrapper_instance': inst,
-        })
+        }))
     
     def _prepare_arg(
         self: 'NamespaceWrapper[_NS]',
         attrname: str
         ) -> tuple[
-            list[str], AddArgumentKwargs, ParserDefaults[_NS]
+            list[str], AddArgumentKwargs
         ]:
 
         kwargs: AddArgumentKwargs = {}
@@ -176,26 +176,29 @@ class NamespaceWrapper(Generic[_NS_co]):
         else:
             kwargs['type'] = str
 
-        return [_name_or_flag], kwargs, ParserDefaults({
-            '_namespace_wrapper_bind_name': attrname,
-            '_namespace_wrapper_instance': self
-        })
+        return [_name_or_flag], kwargs
 
     def __init__(self, ns_type: type[_NS_co], options: NamespaceOptions):
 
         self._ns_co_type = ns_type
         self._options = options
-        options['parser'].set_defaults(**options['defaults'])
+        options['parser'].set_defaults(**options['defaults'], **AddParserDefaults({
+            '_namespace_wrapper_bind_name': None,
+            '_namespace_wrapper_instance': self
+        }))
         self._subparsers = None
 
         self._attrnames = self._get_attrnames(ns_type)
+        
         self._parent: 'NamespaceWrapper | None' = None
+        self._bindname: str | None = None
+
         self._register_namespace(ns_type)
 
     def _register_namespace(self, ns_type: type):
 
-        add_argument_args: list[tuple[list[str], AddArgumentKwargs, ParserDefaults]] = []
-        add_subparser_args: list[tuple[list[str], AddParserKwargs, ParserDefaults]] = []
+        add_argument_args: list[tuple[list[str], AddArgumentKwargs]] = []
+        add_subparser_args: list[tuple[list[str], AddParserKwargs]] = []
 
         for attrname in self._attrnames:
             if self._is_dunder(attrname):
@@ -203,22 +206,29 @@ class NamespaceWrapper(Generic[_NS_co]):
 
             inst = getattr(ns_type, attrname, None)
             if isinstance(inst, NamespaceWrapper):
+                inst._bind(attrname, self)
                 add_subparser_args.append(self._prepare_subparser(attrname, inst))
             else:
                 add_argument_args.append(self._prepare_arg(attrname))
 
-        for args, kwargs, defaults in add_subparser_args:
+        for args, kwargs in add_subparser_args:
             parser = self.get_or_create_subparsers().add_parser(*args, **kwargs)
-            parser.set_defaults(**defaults)
 
-        for args, kwargs, defaults in add_argument_args:
+        for args, kwargs in add_argument_args:
             self.parser.add_argument(*args, **kwargs)
-            self.parser.set_defaults(**defaults)
 
     def get_or_create_subparsers(self):
         if self._subparsers is None:
             self._subparsers = self.parser.add_subparsers()
         return self._subparsers
+
+    def _bind(self, bindname: str, parent: 'NamespaceWrapper'):
+        self._bindname = bindname
+        self._parent = parent
+        self.parser.set_defaults(
+            _namespace_wrapper_bind_name=bindname,
+            _namespace_wrapper_instance=self
+        )
 
     @property
     def ns_type(self) -> type[_NS_co]:
@@ -238,16 +248,17 @@ class NamespaceWrapper(Generic[_NS_co]):
     def parse_args(self: 'NamespaceWrapper[_NS]', args: Sequence[str] | None = None) -> _NS:
         argcomplete.autocomplete(self.parser)
         parse_result = self.parser.parse_args(args, ParseResult())
-        bind_name = parse_result._namespace_wrapper_bind_name
         ns_wrapper = parse_result._namespace_wrapper_instance
+        bind_name = parse_result._namespace_wrapper_bind_name
         ns = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
             value = getattr(parse_result, attrname)
             setattr(ns, attrname, value)
-        while ns_wrapper._parent is not None:
+        while bind_name is not None and ns_wrapper._parent is not None:
             ns_wrapper = ns_wrapper._parent
             new_ns = ns_wrapper._ns_co_type()
             setattr(new_ns, bind_name, ns)
+            bind_name = ns_wrapper.parser.get_default('_namespace_wrapper_bind_name')
             ns = new_ns
         return ns
 

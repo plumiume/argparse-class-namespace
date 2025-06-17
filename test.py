@@ -52,4 +52,32 @@ def test_namespace_subnamespace():
         '--sub-int', '100'
     ])
 
-    ns.sub_ns
+    ret = (ns.sub_ns and ns.sub_ns.sub_str and ns.sub_ns.sub_int)
+
+    assert ret, "SubNamespace parsing failed"
+
+def test_nested_namespace():
+
+    import argparse
+    from argparse_class_namespace import namespace
+
+    @namespace
+    class L2Namespace:
+        inner_str: str
+        inner_int: int = 42
+
+    @namespace
+    class L1Namespace:
+        l2 = L2Namespace
+
+    @namespace
+    class L0Namespace:
+        l1 = L1Namespace
+
+    l0 = L0Namespace.parse_args([
+        'l1', 'l2', 'this-is-inner', '--inner-int', '100'
+    ])
+
+    ret = (l0.l1 and l0.l1.l2 and l0.l1.l2.inner_str and l0.l1.l2.inner_int)
+
+    assert ret, "Nested Namespace parsing failed"
