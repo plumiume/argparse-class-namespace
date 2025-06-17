@@ -64,8 +64,8 @@ class NamespaceWithOptions(Protocol):
 class CallbackWithOptions(Protocol):
     def __call__(
         self,
-        func: Callable[[Concatenate[_NS, _P]], _R]
-        ) -> Callable[[Concatenate[_NS, _P]], _R]: ...
+        func: Callable[Concatenate[_NS, _P], _R]
+        ) -> Callable[Concatenate[_NS, _P], _R]: ...
 
 @runtime_checkable
 class SupportsOriginAndArgs(Protocol):
@@ -287,9 +287,9 @@ class NamespaceWrapper(Generic[_NS_co]):
     @overload
     def callback(
         self: 'NamespaceWrapper[_NS]',
-        func: Callable[[Concatenate[_NS, _P]], _R],
+        func: Callable[Concatenate[_NS, _P], _R],
         /
-        ) -> Callable[[Concatenate[_NS, _P]], _R]: ...
+        ) -> Callable[Concatenate[_NS, _P], _R]: ...
     @overload
     def callback(
         self: 'NamespaceWrapper[_NS]',
@@ -298,7 +298,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         ) -> CallbackWithOptions: ...
     def callback(
         self: 'NamespaceWrapper[_NS]',
-        func: Callable[[Concatenate[_NS, _P]], _R] | None = None,
+        func: Callable[Concatenate[_NS, _P], _R] | None = None,
         /,
         **kwargs: Unpack[CallbackOptionsPartial]
         ):
@@ -310,7 +310,7 @@ class NamespaceWrapper(Generic[_NS_co]):
             kwargs
         )
 
-        def decorator(func: Callable[[Concatenate[_NS, _P]], _R]) -> Callable[[Concatenate[_NS, _P]], _R]:
+        def decorator(func: Callable[Concatenate[_NS, _P], _R]) -> Callable[Concatenate[_NS, _P], _R]:
             name = resolved_options['name'] or func.__name__
             self.parser.set_defaults(**{
                 name: func
