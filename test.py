@@ -82,3 +82,48 @@ def test_nested_namespace():
     ret = (l0.l1 and l0.l1.l2 and l0.l1.l2.inner_str and l0.l1.l2.inner_int)
 
     assert ret, "Nested Namespace parsing failed"
+
+def test_namespace_with_subclass():
+
+    from argparse_class_namespace import namespace
+
+    @namespace
+    class ParentNamespace:
+
+        @namespace
+        class command:
+            child_str: str = 'default'
+            child_int: int = 42
+
+    parent_ns = ParentNamespace.parse_args([
+        'command',
+        '--child-str', 'hello',
+        '--child-int', '100'
+    ])
+
+    ret = (parent_ns.command and
+           parent_ns.command.child_str == 'hello' and
+           parent_ns.command.child_int == 100)
+
+    assert ret, "Namespace with subclass parsing failed"
+
+def test_namespace_with_variable_docstrings():
+
+    from argparse_class_namespace import namespace
+
+    @namespace
+    class DocstringNamespace:
+        """This is a test namespace."""
+        str_var: str = "default"
+        """This is a string variable."""
+        int_var: int = 42
+        """This is an integer variable."""
+
+    # try:
+    #     doc_ns = DocstringNamespace.parse_args(['--help'])
+    # except SystemExit:
+    #     pass
+
+
+
+

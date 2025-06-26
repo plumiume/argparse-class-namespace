@@ -10,6 +10,8 @@ from itertools import chain
 import argparse
 import argcomplete
 
+from .variable_docstring import get_variable_docstrings
+
 _NS = TypeVar('_NS', bound=object)
 _NS_co = TypeVar('_NS_co', covariant=True, bound=object)
 
@@ -24,6 +26,7 @@ class AddArgumentKwargs(TypedDict, total=False):
     choices: list[object]
     action: str
     type: type | Callable[[str], object]
+    help: str | None
 class AddParserKwargs(TypedDict, total=False):
     add_help: Literal[False]
     parents: list[argparse.ArgumentParser]
@@ -204,6 +207,8 @@ class NamespaceWrapper(Generic[_NS_co]):
         else:
             kwargs['type'] = str
 
+        kwargs['help'] = self._docstrings.get(attrname, None)
+
         return [_name_or_flag], kwargs
 
     def __init__(self, ns_type: type[_NS_co], options: NamespaceOptions):
@@ -217,6 +222,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         self._subparsers = None
 
         self._attrnames = self._get_attrnames(ns_type)
+        self._docstrings = get_variable_docstrings(ns_type)
         
         self._parent: 'NamespaceWrapper | None' = None
         self._bindname: str | None = None
