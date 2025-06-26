@@ -46,19 +46,46 @@ def namespace(ns_type: type[_NS_co] | None = None, /, **partial_options: Unpack[
 
     parser = argparse.ArgumentParser(add_help=False)
     parser._add_action(argparse._HelpAction(['-h', '--help']))
-    
-    resolved_options = _resolve_namespace_options(
+
+    if ns_type is not None:
+        return NamespaceWrapper(ns_type, _resolve_namespace_options(
         NamespaceOptions(
+            container=parser,
             parser=parser,
-            defaults={
-                
-            }
+            defaults={}
         ),
         partial_options
-    )
-    def decorator(ns_type: type[_NS_co]) -> NamespaceWrapper[_NS_co]:
-        return NamespaceWrapper(ns_type, resolved_options)
-    if ns_type is None:
-        return decorator
-    else:
-        return decorator(ns_type)
+    ))
+
+    parent_options = partial_options
+
+    @overload
+    def decorator(
+        ns_type: type[_NS_co],
+        /,
+        ) -> NamespaceWrapper[_NS_co]: ...
+    @overload
+    def decorator(
+        **partial_options: Unpack[NamespaceOptionsPartial]
+        ) -> NamespaceWithOptions: ...
+    def decorator(
+        ns_type: type[_NS_co] | None = None,
+        /,
+        **partial_options: Unpack[NamespaceOptionsPartial]
+        ):
+
+        options = parent_options | partial_options
+
+        if ns_type is not None:
+            return NamespaceWrapper(ns_type, _resolve_namespace_options(
+                NamespaceOptions(
+                    container=parser,
+                    parser=parser,
+                    defaults={}
+                ),
+                options
+            ))
+
+        return namespace(**options)
+
+    return decorator

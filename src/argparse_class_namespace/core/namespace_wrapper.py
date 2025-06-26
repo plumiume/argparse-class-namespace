@@ -3,13 +3,19 @@ from typing import (
     Callable, Sequence,
     Union, Literal, Unpack, Concatenate,
     TypedDict, DefaultDict,
-    Any, overload
+    Self, Any, overload
 )
 from types import UnionType
 from itertools import chain
 import argparse
 import argcomplete
 
+from .base_wrapper import (
+    BaseWrapper,
+    AddArgumentKwargs, AddWrapperKwargs,
+    WrapperOptions, WrapperOptionsPartial,
+    ParseResult
+)
 from .variable_docstring import get_variable_docstrings
 
 _NS = TypeVar('_NS', bound=object)
@@ -19,15 +25,7 @@ _O = TypeVar('_O', bound=object)
 _P = ParamSpec('_P')
 _R = TypeVar('_R')
 
-class AddArgumentKwargs(TypedDict, total=False):
-    default: object
-    dest: str
-    nargs: int | str
-    choices: list[object]
-    action: str
-    type: type | Callable[[str], object]
-    help: str | None
-class AddParserKwargs(TypedDict, total=False):
+class AddParserKwargs(AddWrapperKwargs, total=False):
     add_help: Literal[False]
     parents: list[argparse.ArgumentParser]
     help: str | None
@@ -39,12 +37,10 @@ class AddParserDefaults(TypedDict, Generic[_NS]):
     _namespace_wrapper_bind_name: str | None
     _namespace_wrapper_instance: 'NamespaceWrapper[_NS]'
 
-class NamespaceOptions(TypedDict):
+class NamespaceOptions(WrapperOptions):
     parser: argparse.ArgumentParser
-    defaults: dict[str, Any]
-class NamespaceOptionsPartial(TypedDict, total=False):
+class NamespaceOptionsPartial(WrapperOptionsPartial, total=False):
     parser: argparse.ArgumentParser
-    defaults: dict[str, Any]
 def _resolve_namespace_options(full: NamespaceOptions, partial: NamespaceOptionsPartial) -> NamespaceOptions:
     options = full.copy()
     options.update(partial)
@@ -63,7 +59,28 @@ def _return_bool(value: bool) -> bool:
     return value
 
 class NamespaceWithOptions(Protocol):
-    def __call__(self, ns_type: type[_NS]) -> 'NamespaceWrapper[_NS]': ...
+    @overload
+    def __call__(
+        self,
+        ns_type: type[_NS],
+        /
+        ) -> 'NamespaceWrapper[_NS]': ...
+    @overload
+    def __call__(
+        self,
+        /,
+        **partial_options: Unpack[NamespaceOptionsPartial]
+        ) -> 'NamespaceWithOptions': ...
+    def __call__(
+        self,
+        ns_type: type[_NS] | None = None,
+        /,
+        **partial_options: Unpack[NamespaceOptionsPartial]
+        ) -> 'NamespaceWrapper[_NS] | NamespaceWithOptions':
+        """
+        Decorator or factory function to create a NamespaceWrapper for a class type.
+        """
+        raise NotImplementedError("This method should be implemented by the concrete class.")
 
 class CallbackWithOptions(Protocol):
     def __call__(
@@ -71,49 +88,7 @@ class CallbackWithOptions(Protocol):
         func: Callable[Concatenate[_NS, _P], _R]
         ) -> Callable[Concatenate[_NS, _P], _R]: ...
 
-@runtime_checkable
-class SupportsOriginAndArgs(Protocol):
-    __origin__: type
-    __args__: tuple['type | SupportsOriginAndArgs', ...]
-
-class ParseResult(argparse.Namespace, Generic[_NS_co]):
-    _namespace_wrapper_bind_name: str
-    _namespace_wrapper_instance: 'NamespaceWrapper[_NS_co]'
-
-class NamespaceWrapper(Generic[_NS_co]):
-
-    class _Sentinel:
-        def __eq__(self, other): return True
-    _allow_any_value = _Sentinel()
-
-    @staticmethod
-    def _is_dunder(name: str) -> bool:
-        return name.startswith('__') and name.endswith('__')
-
-    @staticmethod
-    def _get_attrnames(type_: type) -> list[str]:
-
-        annotations_keys = type_.__annotations__.keys()
-        dict_keys = type_.__dict__.keys()
-        
-        ordered_keys = {
-            k: i for i, k in enumerate(annotations_keys)
-        } | {
-            k: i for i, k in enumerate(dict_keys, start=len(annotations_keys))
-        }
-
-        return sorted(
-            (k for k in annotations_keys | dict_keys if not NamespaceWrapper._is_dunder(k)),
-            key=lambda k: ordered_keys[k]
-        )
-
-    def _bind(self, bindname: str, parent: 'NamespaceWrapper'):
-        self._bindname = bindname
-        self._parent = parent
-        self.parser.set_defaults(
-            _namespace_wrapper_bind_name=bindname,
-            _namespace_wrapper_instance=self
-        )
+class NamespaceWrapper(BaseWrapper[_NS_co]):
 
     def _prepare_subparser(
         self: 'NamespaceWrapper[_NS]',
@@ -128,108 +103,15 @@ class NamespaceWrapper(Generic[_NS_co]):
             'parents': [inst.parser],
             'help': self._docstrings.get(attrname, None)
         }))
-    
-    def _prepare_arg(
-        self: 'NamespaceWrapper[_NS]',
-        attrname: str
-        ) -> tuple[
-            list[str], AddArgumentKwargs
-        ]:
-
-        kwargs: AddArgumentKwargs = {}
-
-        if attrname in self._ns_co_type.__dict__:
-            _name_or_flag = '--' + attrname.replace('_', '-')
-            kwargs['default'] = self._ns_co_type.__dict__[attrname]
-            if _name_or_flag != attrname:
-                kwargs['dest'] = attrname
-        else:
-            _name_or_flag = attrname.replace('-', '_')
-
-        ann = self._ns_co_type.__annotations__.get(attrname, str)
-
-        stack: list[object | type | SupportsOriginAndArgs] 
-        if isinstance(ann, SupportsOriginAndArgs):
-            if ann.__origin__ is list:
-                stack = list(ann.__args__)
-                kwargs['nargs'] = '*'
-            elif ann.__origin__ is tuple:
-                stack = list(ann.__args__)
-                kwargs['nargs'] = len(ann.__args__)
-            else:
-                stack = [ann]
-        else:
-            stack = [ann]
-
-        bool_found = False
-        allowed = DefaultDict(list[object])
-
-        while stack:
-            current = stack.pop(0)
-
-            if isinstance(current, SupportsOriginAndArgs):
-                if current.__origin__ is Union or current.__origin__ is Literal:
-                    stack.extend(current.__args__)
-                else:
-                    stack.append(current.__origin__)
-            elif isinstance(current, UnionType):
-                stack.extend(current.__args__)
-            elif isinstance(current, type):
-                if issubclass(current, bool):
-                    bool_found = True
-                else:
-                    allowed[current].append(self._allow_any_value)
-            elif isinstance(current, str | int | bool):
-                allowed[type(current)].append(current)
-            else:
-                raise TypeError(f"Unsupported type annotation: {current}")
-
-        choices = list(chain.from_iterable(allowed.values()))
-        if bool_found:
-            kwargs['action'] = 'store_false' if kwargs.get('default', None) else 'store_true'
-            del kwargs['default']
-        elif self._allow_any_value not in choices:
-            kwargs['choices'] = choices
-        elif allowed:
-            def _type(value_string: str):
-                errors: list[TypeError | ValueError] = []
-                for t, a in allowed.items():
-                    try:
-                        value = t(value_string)
-                    except (TypeError, ValueError) as e:
-                        errors.append(e)
-                        continue
-                    if self._allow_any_value not in a or value in a:
-                        return value
-                raise TypeError(
-                    f"Value '{value_string}' does not match any of the allowed types: "
-                    f"{', '.join(str(t) for t in allowed.keys())}. Errors: {errors}"
-                )
-            kwargs['type'] = _type
-        else:
-            kwargs['type'] = str
-
-        kwargs['help'] = self._docstrings.get(attrname, None)
-
-        return [_name_or_flag], kwargs
 
     def __init__(self, ns_type: type[_NS_co], options: NamespaceOptions):
 
-        self._ns_co_type = ns_type
-        self._options = options
-        options['parser'].set_defaults(**options['defaults'], **AddParserDefaults({
+        options['container'].set_defaults(**options['defaults'], **AddParserDefaults({
             '_namespace_wrapper_bind_name': None,
             '_namespace_wrapper_instance': self
         }))
-        self._subparsers = None
 
-        self._attrnames = self._get_attrnames(ns_type)
-        self._docstrings = get_variable_docstrings(ns_type)
-        
-        self._parent: 'NamespaceWrapper | None' = None
-        self._bindname: str | None = None
-
-        self._register_namespace(ns_type)
+        super().__init__(ns_type, options)
 
     def _register_namespace(self, ns_type: type):
 
@@ -247,15 +129,15 @@ class NamespaceWrapper(Generic[_NS_co]):
                 add_argument_args.append(self._prepare_arg(attrname))
 
         for args, kwargs in add_subparser_args:
-            self.get_or_create_subparsers().add_parser(*args, **kwargs)
+            self.add_wrapper_to_subwrappers(*args, **kwargs)
 
         for args, kwargs in add_argument_args:
             self.parser.add_argument(*args, **kwargs)
 
-    def get_or_create_subparsers(self):
+    def add_wrapper_to_subwrappers(self, *args: str, **kwargs: Unpack[AddParserKwargs]):
         if self._subparsers is None:
             self._subparsers = self.parser.add_subparsers()
-        return self._subparsers
+        return self._subparsers.add_parser(*args, **kwargs)
 
     @property
     def ns_type(self) -> type[_NS_co]:
@@ -271,17 +153,32 @@ class NamespaceWrapper(Generic[_NS_co]):
         return self._attrnames
     @property
     def parser(self) -> argparse.ArgumentParser:
-        return self._options['parser']
-    @property
-    def defaults(self) -> dict[str, Any]:
-        return self._options['defaults']
+        container = self._options['container']
+        if isinstance(container, argparse.ArgumentParser):
+            return container
+        else:
+            raise TypeError(
+                f"Expected container to be an ArgumentParser, got {type(container).__name__}"
+            )
 
     @overload
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: ParseResult | None, owner: type[ParseResult] | None = None) -> 'NamespaceWrapper[_NS]': ...
+    def __get__(
+        self,
+        instance: _O,
+        owner: type[_O] | None = None
+        ) -> _NS_co | None: ...
     @overload
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O, owner: type[_O] | None = None) -> _NS | None: ...
+    def __get__(
+        self,
+        instance: ParseResult | None,
+        owner: type[ParseResult] | None = None
+        ) -> Self: ...
 
-    def __get__(self: 'NamespaceWrapper[_NS]', instance: _O | None, owner: type[_O] | None = None):
+    def __get__(
+        self,
+        instance: ParseResult | None | _O,
+        owner: type[_O] | None = None
+        ):
         if instance is None or isinstance(instance, ParseResult):
             return self
         else:
@@ -329,15 +226,17 @@ class NamespaceWrapper(Generic[_NS_co]):
         else:
             return decorator(func)
 
-    def set_defaults(self, **kwargs: object):
-        return self.parser.set_defaults(**kwargs)
-
     def parse_args(self: 'NamespaceWrapper[_NS]', args: Sequence[str] | None = None) -> _NS:
         argcomplete.autocomplete(self.parser)
-        parse_result = self.parser.parse_args(args, ParseResult())
+        parse_result = self.parser.parse_args(args, ParseResult[_NS]())
         ns_wrapper = parse_result._namespace_wrapper_instance
         bind_name = parse_result._namespace_wrapper_bind_name
-        ns = ns_wrapper._ns_co_type()
+        if not isinstance(ns_wrapper, NamespaceWrapper):
+            # Never
+            raise ValueError(
+                "ParseResult does not contain a valid NamespaceWrapper instance."
+            )
+        ns: _NS = ns_wrapper._ns_co_type()
         for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
             if (
                 ns_wrapper is self
@@ -348,7 +247,7 @@ class NamespaceWrapper(Generic[_NS_co]):
                         for pc in ns_wrapper.parser.prefix_chars
                     )
                     or attrname in ns_wrapper.subparsers.choices
-                )
+                    )
                 ):
                 continue
             setattr(ns, attrname, getattr(parse_result, attrname))
@@ -356,7 +255,7 @@ class NamespaceWrapper(Generic[_NS_co]):
             ns_wrapper = ns_wrapper._parent
             new_ns = ns_wrapper._ns_co_type()
             setattr(new_ns, bind_name, ns)
-            bind_name = ns_wrapper.parser.get_default('_namespace_wrapper_bind_name')
+            bind_name = ns_wrapper.container.get_default('_namespace_wrapper_bind_name')
             ns = new_ns
         return ns
 
