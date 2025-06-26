@@ -30,6 +30,7 @@ class AddArgumentKwargs(TypedDict, total=False):
 class AddParserKwargs(TypedDict, total=False):
     add_help: Literal[False]
     parents: list[argparse.ArgumentParser]
+    help: str | None
 
 class AddArgumentDefaults(TypedDict, Generic[_NS]):
     pass
@@ -125,6 +126,7 @@ class NamespaceWrapper(Generic[_NS_co]):
         return ([attrname.replace('_', '-')], AddParserKwargs({
             'add_help': False,
             'parents': [inst.parser],
+            'help': self._docstrings.get(attrname, None)
         }))
     
     def _prepare_arg(
