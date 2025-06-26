@@ -16,6 +16,18 @@ _NS_co = TypeVar('_NS_co', covariant=True, bound=object)
 
 _O = TypeVar('_O', bound=object)
 
+def _return_bool(value: bool) -> bool:
+    return value
+
+class ArgumentAddable(Protocol):
+    def add_argument(self, *args, **kwargs) -> Any: ...
+
+class DummyContainer(ArgumentAddable):
+    def __init__(self):
+        self.args_kwargs: list[tuple[tuple, dict]] = []
+    def add_argument(self, *args, **kwargs):
+        self.args_kwargs.append((args, kwargs))
+
 class AddArgumentKwargs(TypedDict, total=False):
     default: object
     dest: str
@@ -29,14 +41,11 @@ class AddWrapperKwargs(TypedDict, total=False):
     pass
 
 class WrapperOptions(TypedDict):
-    container: argparse.ArgumentParser | argparse._ArgumentGroup
+    container: argparse.ArgumentParser | argparse._ArgumentGroup | None
     defaults: dict[str, object]
 class WrapperOptionsPartial(TypedDict, total=False):
-    container: argparse.ArgumentParser | argparse._ArgumentGroup
+    container: argparse.ArgumentParser | argparse._ArgumentGroup | None
     defaults: dict[str, object]
-
-class _SubWrapperProtocol(Protocol[_NS_co]):
-    def add_wrapper(self, *args, **kwargs): ...
 
 @runtime_checkable
 class SupportsOriginAndArgs(Protocol):
@@ -71,12 +80,13 @@ class BaseWrapper(Generic[_NS_co]):
         )
 
     def _bind(self, bindname: str, parent: 'BaseWrapper'):
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement _bind"
+        )
+
+    def _bind_base(self, bindname: str, parent: 'BaseWrapper'):
         self._bindname = bindname
         self._parent = parent
-        self.container.set_defaults(
-            _namespace_wrapper_bind_name=bindname,
-            _namespace_wrapper_instance=self
-        )
 
     def _prepare_subwrapper(
         self,
@@ -183,9 +193,10 @@ class BaseWrapper(Generic[_NS_co]):
 
         self._parent: 'BaseWrapper | None' = None
         self._bindname: str | None = None
+        self._dummy_container = DummyContainer()
 
-        self._subparsers = None
-        self._argument_groups = None
+        self._subparsers: argparse._SubParsersAction[argparse.ArgumentParser] | None = None
+        self._argument_groups = dict[str, argparse._ArgumentGroup]()
 
         self._register_namespace(ns_type)
 
@@ -208,7 +219,7 @@ class BaseWrapper(Generic[_NS_co]):
                 if isinstance(inst, w_type):
                     w_args.append((
                         inst,
-                        *w_type._prepare_subwrapper(self, attrname, inst),
+                        *w_type._prepare_subwrapper(self, attrname, inst)
                     ))
             else:
                 add_argument_args.append(
@@ -217,13 +228,13 @@ class BaseWrapper(Generic[_NS_co]):
 
         for w_type, w_args in add_wrapper_args.items():
             for inst, args, kwargs in w_args:
-                inst.add_wrapper_to_subwrappers(
-                    self, *args, **kwargs
+                w_type.add_wrapper(
+                    inst, self, *args, **kwargs
                 )
         for args, kwargs in add_argument_args:
-            self.container.add_argument(*args, **kwargs)
+            self.argument_addable_object.add_argument(*args, **kwargs)
 
-    def add_wrapper_to_subwrappers(self, *args, **kwargs):
+    def add_wrapper(self, target: 'BaseWrapper', *args, **kwargs):
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement add_wrapper_to_subwrappers"
         )
@@ -244,7 +255,13 @@ class BaseWrapper(Generic[_NS_co]):
         return self._attrnames
     @property
     def container(self) -> argparse.ArgumentParser | argparse._ArgumentGroup:
-        return self._options['container']
+        container = self._options['container']
+        if container is None:
+            raise ValueError("Container is not set")
+        return container
+    @property
+    def argument_addable_object(self) -> ArgumentAddable:
+        return self._options['container'] or self._dummy_container
     @property
     def defaults(self) -> dict[str, Any]:
         return self._options['defaults']
@@ -272,7 +289,3 @@ class BaseWrapper(Generic[_NS_co]):
 
     def set_defaults(self, **kwargs: object):
         return self.container.set_defaults(**kwargs)
-
-class ParseResult(Generic[_NS_co], argparse.Namespace):
-    _namespace_wrapper_bind_name: str
-    _namespace_wrapper_instance: BaseWrapper[_NS_co]

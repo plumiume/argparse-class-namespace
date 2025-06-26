@@ -119,11 +119,33 @@ def test_namespace_with_variable_docstrings():
         int_var: int = 42
         """This is an integer variable."""
 
-    # try:
-    #     doc_ns = DocstringNamespace.parse_args(['--help'])
-    # except SystemExit:
-    #     pass
+    ns = DocstringNamespace.parse_args([
+        '--str-var', 'hello',
+        '--int-var', '100'
+    ])
 
+    ret = (ns.str_var == 'hello' and ns.int_var == 100)
 
+def test_namespace_group():
+
+    from argparse_class_namespace import namespace, group, mixin
+
+    @namespace
+    class GroupedNamespace(mixin.Repr):
+
+        @group
+        class group1(mixin.Repr):
+            group1_str: str = 'default'
+            group1_int: int = 42
+
+    ns = GroupedNamespace.parse_args([
+        '--group1', '0',
+    ])
+
+    ret = (
+        ns.group1
+        and ns.group1.group1_str == 'default'
+        and ns.group1.group1_int == 42
+    )
 
 
