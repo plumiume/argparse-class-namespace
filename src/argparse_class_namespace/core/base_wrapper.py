@@ -14,6 +14,7 @@ from .variable_docstring import get_variable_docstrings
 _NS = TypeVar('_NS', bound=object)
 _NS_co = TypeVar('_NS_co', covariant=True, bound=object)
 
+_T = TypeVar('_T', bound=object)
 _O = TypeVar('_O', bound=object)
 
 def _return_bool(value: bool) -> bool:
@@ -215,12 +216,17 @@ class BaseWrapper(Generic[_NS_co]):
                 continue
 
             inst = getattr(self._ns_co_type, attrname, None)
+            is_continue = False
             for w_type, w_args in add_wrapper_args.items():
                 if isinstance(inst, w_type):
                     w_args.append((
                         inst,
                         *w_type._prepare_subwrapper(self, attrname, inst)
                     ))
+                    is_continue = True
+                    break
+            if is_continue:
+                continue
             else:
                 add_argument_args.append(
                     self._prepare_arg(attrname)
@@ -231,6 +237,10 @@ class BaseWrapper(Generic[_NS_co]):
                 w_type.add_wrapper(
                     inst, self, *args, **kwargs
                 )
+
+        if not add_argument_args and self._subparsers:
+            self._subparsers.required = True
+                
         for args, kwargs in add_argument_args:
             self.argument_addable_object.add_argument(*args, **kwargs)
 
@@ -269,19 +279,19 @@ class BaseWrapper(Generic[_NS_co]):
     @overload
     def __get__(
         self,
-        instance: _O,
-        owner: type[_O] | None = None
-        ) -> _NS_co | None: ...
+        instance: type | None,
+        owner: Any = None
+        ) -> Self: ...
     @overload
     def __get__(
         self,
-        instance: None,
-        owner: type | None = None
-        ) -> Self: ...
+        instance: _O,
+        owner: type[_O] | None = None
+        ) -> _NS_co | None: ...
     def __get__(
         self,
-        instance: _O | None,
-        owner: type[_O] | None = None
+        instance: type[_NS] |  _O | None,
+        owner: type[type[_NS] | _O] | None = None
         ):
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement __get__"

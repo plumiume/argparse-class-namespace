@@ -163,21 +163,21 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
     @overload
     def __get__(
         self,
-        instance: _O,
-        owner: type[_O] | None = None
-        ) -> _NS_co | None: ...
+        instance: type | ParseResult | None,
+        owner: Any = None
+        ) -> Self: ...
     @overload
     def __get__(
         self,
-        instance: ParseResult | None,
-        owner: type[ParseResult] | None = None
-        ) -> Self: ...
+        instance: _O,
+        owner: type[_O] | None = None
+        ) -> _NS_co | None: ...
     def __get__(
         self,
-        instance: ParseResult | None | _O,
-        owner: type[_O] | None = None
+        instance: type | ParseResult | _O | None,
+        owner: type[type | ParseResult | _O] | None = None
         ):
-        if instance is None or isinstance(instance, ParseResult):
+        if instance is None or isinstance(instance, type | ParseResult):
             return self
 
         # Fallback to None if not set via setattr

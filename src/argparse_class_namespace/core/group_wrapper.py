@@ -121,18 +121,18 @@ class GroupWrapper(BaseWrapper[_NS_co]):
     @overload
     def __get__(
         self,
-        instance: _O,
-        owner: type[_O] | None = None
-    ) -> _NS_co | None: ...
+        instance: type | None,
+        owner: Any = None
+    ) -> Self: ...
     @overload
     def __get__(
         self,
-        instance: None,
-        owner: type | None = None
-    ) -> Self: ...
+        instance: _O,
+        owner: type[_O] | None = None
+    ) -> _NS_co | None: ...
     def __get__(
         self,
-        instance: _O | None,
+        instance: type[_NS] | _O | None,
         owner: type[_O] | None = None
         ):
         if instance is None:
