@@ -237,19 +237,21 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
             )
 
         ns: _NS = ns_wrapper_instance._ns_co_type()
-        attrname_to_group = dict(chain.from_iterable(
-            (
+        attrname_to_gname = dict[str, str]()
+        gname_to_gns = dict[str, object]()
+        for agname, agwrapper in ns_wrapper_instance._argument_groups.items():
+            attrname_to_gname.update(
                 (attrname, agname)
                 for attrname in agwrapper.attrnames
             )
-            for agname, agwrapper in ns_wrapper_instance._argument_groups.items()
-        ))
-        group_ns_instances = {
-            agname: ag._ns_co_type()
-            for agname, ag in ns_wrapper_instance._argument_groups.items()
-        }
+            agns = agwrapper._ns_co_type()
+            gname_to_gns[agname] = agns
+            setattr(ns, agname, agns)
 
-        for attrname in chain(ns_wrapper_instance.attrnames, ns_wrapper_instance.defaults.keys()):
+        for attrname in chain(
+            attrname_to_gname.keys(),
+            ns_wrapper_instance.attrnames,
+            ns_wrapper_instance.defaults.keys()):
             if (
                 ns_wrapper_instance is self
                 and ns_wrapper_instance.subparsers
@@ -262,13 +264,12 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
                     )
                 ):
                 continue
-            group = attrname_to_group.get(attrname, None)
             if not hasattr(parse_result, attrname):
                 continue
-            elif group is None:
+            elif (gname := attrname_to_gname.get(attrname, None)) is None:
                 setattr(ns, attrname, getattr(parse_result, attrname))
             else:
-                gns_inst = group_ns_instances[group]
+                gns_inst = gname_to_gns[gname]
                 setattr(gns_inst, attrname, getattr(parse_result, attrname))
 
         while ns_wrapper_bind_name is not None and ns_wrapper_instance._parent is not None:
