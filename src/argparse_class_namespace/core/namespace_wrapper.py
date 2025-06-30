@@ -214,7 +214,7 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
         )
 
         def decorator(func: Callable[Concatenate[_NS, _P], _R]) -> Callable[Concatenate[_NS, _P], _R]:
-            self.parser.set_defaults(**{
+            self.set_defaults(**{
                 resolved_options['name'] or func.__name__: func
             })
             return func
@@ -251,7 +251,8 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
         for attrname in chain(
             attrname_to_gname.keys(),
             ns_wrapper_instance.attrnames,
-            ns_wrapper_instance.defaults.keys()):
+            ns_wrapper_instance.default_keys):
+
             if (
                 ns_wrapper_instance is self
                 and ns_wrapper_instance.subparsers
@@ -265,7 +266,8 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
                 ):
                 continue
             if not hasattr(parse_result, attrname):
-                continue
+                if default := ns_wrapper_instance.container.get_default(attrname):
+                    setattr(ns, attrname, default)
             elif (gname := attrname_to_gname.get(attrname, None)) is None:
                 setattr(ns, attrname, getattr(parse_result, attrname))
             else:

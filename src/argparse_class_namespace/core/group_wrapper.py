@@ -75,7 +75,9 @@ class GroupWrapper(BaseWrapper[_NS_co]):
 
     def _bind(self, bindname: str, parent: BaseWrapper):
         self._bind_base(bindname, parent)
-        self._options['container'] = parent._options['container']
+        self._options['container'] = parent.container.add_argument_group(
+            bindname
+        )
         for args, kwargs in self._dummy_container.args_kwargs:
             self.container.add_argument(*args, **kwargs)
         self.container.set_defaults(
@@ -107,8 +109,6 @@ class GroupWrapper(BaseWrapper[_NS_co]):
         *args: str,
         **kwargs: Unpack[AddArgumentGroupKwargs]
         ):
-        argument_group = target.container.add_argument_group(**kwargs)
-        self._options['container'] = argument_group
         attrname, *_ = args
         target._argument_groups[attrname] = self
 

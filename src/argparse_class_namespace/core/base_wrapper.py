@@ -1,6 +1,6 @@
 from typing import (
     TypeVar, Generic, Protocol, runtime_checkable,
-    Callable, Sequence,
+    Callable, Iterable,
     Union, Literal, Unpack, Concatenate,
     TypedDict, DefaultDict,
     Self, Any, overload
@@ -187,6 +187,7 @@ class BaseWrapper(Generic[_NS_co]):
         ):
 
         self._options = options
+        self._default_keys = set[str]()
 
         self._ns_co_type = ns_type
         self._attrnames = self._get_attrnames(ns_type)
@@ -273,8 +274,8 @@ class BaseWrapper(Generic[_NS_co]):
     def argument_addable_object(self) -> ArgumentAddable:
         return self._options['container'] or self._dummy_container
     @property
-    def defaults(self) -> dict[str, Any]:
-        return self._options['defaults']
+    def default_keys(self) -> Iterable[str]:
+        return self._options['defaults'].keys() | self._default_keys
 
     @overload
     def __get__(
@@ -298,4 +299,5 @@ class BaseWrapper(Generic[_NS_co]):
         )
 
     def set_defaults(self, **kwargs: object):
+        self._default_keys.update(kwargs.keys())
         return self.container.set_defaults(**kwargs)
