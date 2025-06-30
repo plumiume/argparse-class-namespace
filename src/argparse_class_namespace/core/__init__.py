@@ -1,6 +1,7 @@
 from typing import TypeVar, overload, Unpack, Callable
 import argparse
 
+from .help_formatter import DestAndTypeHelpFormatter
 from .namespace_wrapper import (
     NamespaceWrapper,
     _resolve_namespace_options, NamespaceOptions, NamespaceOptionsPartial,
@@ -58,7 +59,7 @@ def namespace(
         ```
     """
 
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(add_help=False, formatter_class=DestAndTypeHelpFormatter)
     parser._add_action(argparse._HelpAction(['-h', '--help']))
 
     if ns_type is not None:
