@@ -108,8 +108,9 @@ class GroupWrapper(BaseWrapper[_NS_co]):
         **kwargs: Unpack[AddArgumentGroupKwargs]
         ):
         argument_group = target.container.add_argument_group(**kwargs)
+        self._options['container'] = argument_group
         attrname, *_ = args
-        target._argument_groups[attrname] = argument_group
+        target._argument_groups[attrname] = self
 
     @property
     def container(self) -> argparse.ArgumentParser | argparse._ArgumentGroup:

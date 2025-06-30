@@ -228,47 +228,54 @@ class NamespaceWrapper(BaseWrapper[_NS_co]):
         
         argcomplete.autocomplete(self.parser)
         parse_result = self.parser.parse_args(args, ParseResult[_NS]())
-        ns_wrapper = parse_result._namespace_wrapper_instance
-        bind_name = parse_result._namespace_wrapper_bind_name
-        if not isinstance(ns_wrapper, NamespaceWrapper):
+        ns_wrapper_instance = parse_result._namespace_wrapper_instance
+        ns_wrapper_bind_name = parse_result._namespace_wrapper_bind_name
+        if not isinstance(ns_wrapper_instance, NamespaceWrapper):
             # Never
             raise ValueError(
                 "ParseResult does not contain a valid NamespaceWrapper instance."
             )
 
-        ns: _NS = ns_wrapper._ns_co_type()
-        argument_groups: dict[str, object] = {
-            attrname: (
-                nsg := GroupWrapper._from_argument_group(ag)._ns_co_type(),
-                setattr(ns, attrname, nsg)
-            )[0]
-            for attrname, ag in ns_wrapper._argument_groups.items()
+        ns: _NS = ns_wrapper_instance._ns_co_type()
+        attrname_to_group = dict(chain.from_iterable(
+            (
+                (attrname, agname)
+                for attrname in agwrapper.attrnames
+            )
+            for agname, agwrapper in ns_wrapper_instance._argument_groups.items()
+        ))
+        group_ns_instances = {
+            agname: ag._ns_co_type()
+            for agname, ag in ns_wrapper_instance._argument_groups.items()
         }
 
-        for attrname in chain(ns_wrapper.attrnames, ns_wrapper.defaults.keys()):
+        for attrname in chain(ns_wrapper_instance.attrnames, ns_wrapper_instance.defaults.keys()):
             if (
-                ns_wrapper is self
-                and ns_wrapper.subparsers
+                ns_wrapper_instance is self
+                and ns_wrapper_instance.subparsers
                 and (
                     any(
-                        attrname.replace('_', pc) in ns_wrapper.subparsers.choices
-                        for pc in ns_wrapper.parser.prefix_chars
+                        attrname.replace('_', pc) in ns_wrapper_instance.subparsers.choices
+                        for pc in ns_wrapper_instance.parser.prefix_chars
                     )
-                    or attrname in ns_wrapper.subparsers.choices
+                    or attrname in ns_wrapper_instance.subparsers.choices
                     )
                 ):
                 continue
-            nsg = argument_groups.get(attrname, None)
-            if nsg:
-                setattr(nsg, attrname, getattr(parse_result, attrname))
-            else:
+            group = attrname_to_group.get(attrname, None)
+            if not hasattr(parse_result, attrname):
+                continue
+            elif group is None:
                 setattr(ns, attrname, getattr(parse_result, attrname))
+            else:
+                gns_inst = group_ns_instances[group]
+                setattr(gns_inst, attrname, getattr(parse_result, attrname))
 
-        while bind_name is not None and ns_wrapper._parent is not None:
-            ns_wrapper = ns_wrapper._parent
-            new_ns = ns_wrapper._ns_co_type()
-            setattr(new_ns, bind_name, ns)
-            bind_name = ns_wrapper.container.get_default('_namespace_wrapper_bind_name')
+        while ns_wrapper_bind_name is not None and ns_wrapper_instance._parent is not None:
+            ns_wrapper_instance = ns_wrapper_instance._parent
+            new_ns = ns_wrapper_instance._ns_co_type()
+            setattr(new_ns, ns_wrapper_bind_name, ns)
+            ns_wrapper_bind_name = ns_wrapper_instance.container.get_default('_namespace_wrapper_bind_name')
             ns = new_ns
 
         return ns

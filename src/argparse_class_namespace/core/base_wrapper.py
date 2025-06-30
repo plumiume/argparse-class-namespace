@@ -197,7 +197,7 @@ class BaseWrapper(Generic[_NS_co]):
         self._dummy_container = DummyContainer()
 
         self._subparsers: argparse._SubParsersAction[argparse.ArgumentParser] | None = None
-        self._argument_groups = dict[str, argparse._ArgumentGroup]()
+        self._argument_groups = dict[str, 'BaseWrapper']()
 
         self._register_namespace(ns_type)
 
